@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Hand Controlled 3D Particle System</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+<style>
+html, body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background: #000;
+}
+#info {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  color: #0ff;
+  font-family: monospace;
+  z-index: 10;
+}
+video {
+  display: none;
+}
+</style>
+</head>
+
+<body>
+<div id="info">
+🖐 Open hand → Expand<br>
+✊ Closed fist → Contract<br>
+🤏 Pinch → Switch Shape<br>
+Move hand → Rotate
+</div>
+
+<video id="video" autoplay></video>
+
+<!-- Three.js -->
+<script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
+
+<!-- MediaPipe -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+
+<script>
+/* ================= THREE.JS SETUP ================= */
+let scene = new THREE.Scene();
+let camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+camera.position.z = 80;
+
+let renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
+
+/* ================= PARTICLES ================= */
+const particleCount = 6000;
+let geometry = new THREE.BufferGeometry();
+let positions = new Float32Array(particleCount * 3);
+let colors = new Float32Array(particleCount * 3);
+
+let material = new THREE.PointsMaterial({
+  size: 0.7,
+  vertexColors: true
+});
+
+let points = new THREE.Points(geometry, material);
+scene.add(points);
+
+let shapeIndex = 0;
+const shapes = ["heart", "flower", "saturn", "firework", "sphere"];
+
+/* ================= SHAPE GENERATORS ================= */
+function generateShape(type) {
+  for (let i = 0; i < particleCount; i++) {
+    let x, y, z;
+    let t = Math.random() * Math.PI * 2;
+    let r = Math.random() * 20;
+
+    if (type === "heart") {
+      x = 16 * Math.pow(Math.sin(t), 3);
+      y = 13 * Math.cos(t) - 5 * Math.cos(2*t) - 2 * Math.cos(3*t) - Math.cos(4*t);
+      z = (Math.random() - 0.5) * 10;
+    }
+
+    else if (type === "flower") {
+      let k = 5;
+      let r2 = Math.sin(k * t) * 20;
+      x = r2 * Math.cos(t);
+      y = r2 * Math.sin(t);
+      z = (Math.random() - 0.5) * 10;
+    }
+
+    else if (type === "saturn") {
+      let ring = Math.random() > 0.4;
+      if (ring) {
+        let angle = Math.random() * Math.PI * 2;
+        let radius = 30 + Math.random() * 5;
+        x = Math.cos(angle) * radius;
+        z = Math.sin(angle) * radius;
+        y = (Math.random() - 0.5) * 2;
+      } else {
+        let phi = Math.acos(2 * Math.random() - 1);
+        let theta = Math.random() * Math.PI * 2;
+        x = 10 * Math.sin(phi) * Math.cos(theta);
+        y = 10 * Math.sin(phi) * Math.sin(theta);
+        z = 10 * Math.cos(phi);
+      }
+    }
+
+    else if (type === "firework") {
+      let theta = Math.random() * Math.PI * 2;
+      let phi = Math.acos(2 * Math.random() - 1);
+      let radius = Math.random() * 30;
+      x = radius * Math.sin(phi) * Math.cos(theta);
+      y = radius * Math.sin(phi) * Math.sin(theta);
+      z = radius * Math.cos(phi);
+    }
+
+    else {
+      let phi = Math.acos(2 * Math.random() - 1);
+      let theta = Math.random() * Math.PI * 2;
+      x = 25 * Math.sin(phi) * Math.cos(theta);
+      y = 25 * Math.sin(phi) * Math.sin(theta);
+      z = 25 * Math.cos(phi);
+    }
+
+    positions[i * 3] = x;
+    positions[i * 3 + 1] = y;
+    positions[i * 3 + 2] = z;
+
+    colors[i * 3] = Math.random();
+    colors[i * 3 + 1] = Math.random();
+    colors[i * 3 + 2] = Math.random();
+  }
+
+  geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+  geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+  geometry.attributes.position.needsUpdate = true;
+}
+
+generateShape(shapes[shapeIndex]);
+
+/* ================= HAND TRACKING ================= */
+const video = document.getElementById("video");
+
+const hands = new Hands({
+  locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+});
+
+hands.setOptions({
+  maxNumHands: 1,
+  modelComplexity: 1,
+  minDetectionConfidence: 0.7,
+  minTrackingConfidence: 0.7
+});
+
+let lastPinch = false;
+
+hands.onResults(results => {
+  if (!results.multiHandLandmarks.length) return;
+
+  const lm = results.multiHandLandmarks[0];
+
+  const thumb = lm[4];
+  const index = lm[8];
+  const palm = lm[0];
+
+  const pinchDist = Math.hypot(
+    thumb.x - index.x,
+    thumb.y - index.y
+  );
+
+  /* Pinch to change shape */
+  if (pinchDist < 0.04 && !lastPinch) {
+    shapeIndex = (shapeIndex + 1) % shapes.length;
+    generateShape(shapes[shapeIndex]);
+    lastPinch = true;
+  }
+  if (pinchDist > 0.06) lastPinch = false;
+
+  /* Open / Close */
+  let open = lm[12].y < palm.y;
+
+  let scale = open ? 1.01 : 0.99;
+  points.scale.multiplyScalar(scale);
+
+  /* Rotate by hand movement */
+  points.rotation.y = (index.x - 0.5) * Math.PI;
+  points.rotation.x = (index.y - 0.5) * Math.PI;
+});
+
+/* Camera */
+const cam = new Camera(video, {
+  onFrame: async () => await hands.send({ image: video }),
+  width: 640,
+  height: 480
+});
+cam.start();
+
+/* ================= ANIMATE ================= */
+function animate() {
+  requestAnimationFrame(animate);
+  points.rotation.z += 0.002;
+  renderer.render(scene, camera);
+}
+animate();
+
+window.addEventListener("resize", () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+</script>
+</body>
+</html>
