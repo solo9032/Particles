@@ -3,15 +3,14 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Ethereal Hand-Controlled Particle Universe</title>
+<title>Smooth Hand Controlled 3D Particle System</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
 html,body{
     margin:0;
-    padding:0;
     overflow:hidden;
-    background:#04070a;
+    background:#05080d;
     font-family:Segoe UI,Roboto,sans-serif;
 }
 #ui{
@@ -21,31 +20,21 @@ html,body{
     z-index:10;
     color:#eaffff;
 }
-#ui h1{
+#ui h2{
     margin:0;
     font-weight:300;
-    letter-spacing:3px;
-    text-shadow:0 0 15px #00ffff;
-}
-#ui .panel{
-    margin-top:12px;
-    background:rgba(0,0,0,0.55);
-    padding:14px;
-    border-radius:10px;
-    border-left:4px solid #00eaff;
-    font-size:14px;
+    letter-spacing:2px;
 }
 #status{
     margin-top:8px;
     color:#00ff9c;
-    font-weight:bold;
 }
 #video{
     position:absolute;
     bottom:20px;
     right:20px;
     width:220px;
-    height:165px;
+    height:160px;
     border-radius:12px;
     border:2px solid rgba(255,255,255,0.25);
     transform:scaleX(-1);
@@ -62,23 +51,14 @@ html,body{
     font-size:22px;
     z-index:20;
 }
-canvas{
-    display:block;
-}
 </style>
 </head>
 
 <body>
-<div id="loading">Initializing AI & 3D Engine…</div>
+<div id="loading">Loading AI + 3D Engine…</div>
 
 <div id="ui">
-    <h1>ETHERIAL PARTICLES</h1>
-    <div class="panel">
-        🖐 Move hand → Rotate & color<br>
-        🤏 Pinch → Expand / collapse<br>
-        ✊ Fist → Change shape<br>
-        ☝ Fingers spread → Color pulse
-    </div>
+    <h2>HAND PARTICLE SYSTEM</h2>
     <div id="status">Shape: Sphere</div>
 </div>
 
@@ -87,107 +67,98 @@ canvas{
 <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
 
 <script>
-/* ================== BASIC SETUP ================== */
-const PARTICLES = 16000;
-let scene = new THREE.Scene();
-scene.fog = new THREE.FogExp2(0x04070a,0.002);
+/* ================== THREE SETUP ================== */
+const COUNT = 14000;
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x05080d,0.0025);
 
-let camera = new THREE.PerspectiveCamera(70,innerWidth/innerHeight,0.1,2000);
-camera.position.z = 130;
+const camera = new THREE.PerspectiveCamera(70,innerWidth/innerHeight,0.1,2000);
+camera.position.z = 140;
 
-let renderer = new THREE.WebGLRenderer({antialias:true,alpha:true});
+const renderer = new THREE.WebGLRenderer({antialias:true});
 renderer.setSize(innerWidth,innerHeight);
 renderer.setPixelRatio(devicePixelRatio);
 document.body.appendChild(renderer.domElement);
 
 /* ================== PARTICLES ================== */
-let geometry = new THREE.BufferGeometry();
-let pos = new Float32Array(PARTICLES*3);
-let target = new Float32Array(PARTICLES*3);
-let col = new Float32Array(PARTICLES*3);
+const geo = new THREE.BufferGeometry();
+const pos = new Float32Array(COUNT*3);
+const base = new Float32Array(COUNT*3);
+const target = new Float32Array(COUNT*3);
+const col = new Float32Array(COUNT*3);
 
-for(let i=0;i<PARTICLES;i++){
+for(let i=0;i<COUNT;i++){
     let i3=i*3;
-    pos[i3]=pos[i3+1]=pos[i3+2]=(Math.random()-0.5)*120;
+    pos[i3]=base[i3]=(Math.random()-0.5)*120;
+    pos[i3+1]=base[i3+1]=(Math.random()-0.5)*120;
+    pos[i3+2]=base[i3+2]=(Math.random()-0.5)*120;
     col[i3]=col[i3+1]=col[i3+2]=1;
 }
-geometry.setAttribute("position",new THREE.BufferAttribute(pos,3));
-geometry.setAttribute("color",new THREE.BufferAttribute(col,3));
+geo.setAttribute("position",new THREE.BufferAttribute(pos,3));
+geo.setAttribute("color",new THREE.BufferAttribute(col,3));
 
-function glowTexture(){
-    let c=document.createElement("canvas");
-    c.width=c.height=32;
-    let g=c.getContext("2d").createRadialGradient(16,16,0,16,16,16);
-    g.addColorStop(0,"rgba(255,255,255,1)");
-    g.addColorStop(0.4,"rgba(255,255,255,0.4)");
-    g.addColorStop(1,"rgba(0,0,0,0)");
-    let ctx=c.getContext("2d");
-    ctx.fillStyle=g; ctx.fillRect(0,0,32,32);
-    return new THREE.CanvasTexture(c);
-}
-
-let material=new THREE.PointsMaterial({
+const mat = new THREE.PointsMaterial({
     size:0.6,
-    map:glowTexture(),
-    transparent:true,
+    vertexColors:true,
     blending:THREE.AdditiveBlending,
-    depthWrite:false,
-    vertexColors:true
+    transparent:true,
+    depthWrite:false
 });
 
-let particles=new THREE.Points(geometry,material);
+const particles = new THREE.Points(geo,mat);
 scene.add(particles);
 
 /* ================== SHAPES ================== */
-const shapes=["Sphere","Heart","Flower","Saturn","Fireworks","Torus"];
+const shapes=["Sphere","Heart","Flower","Saturn","Fireworks"];
 let shapeIndex=0;
 
-const Shape={
-Sphere:()=>sphere(45),
-Heart:()=>heart(),
-Flower:()=>flower(),
-Saturn:()=>saturn(),
-Fireworks:()=>sphere(65,true),
-Torus:()=>torus()
-};
-
-function sphere(r,burst=false){
-    let t=Math.random()*Math.PI*2,p=Math.acos(2*Math.random()-1);
-    let rr=burst?Math.cbrt(Math.random())*r:r;
-    return {x:rr*Math.sin(p)*Math.cos(t),y:rr*Math.sin(p)*Math.sin(t),z:rr*Math.cos(p)};
-}
-function heart(){
-    let t=Math.random()*Math.PI*2;
-    let x=16*Math.pow(Math.sin(t),3);
-    let y=13*Math.cos(t)-5*Math.cos(2*t)-2*Math.cos(3*t)-Math.cos(4*t);
-    let z=(Math.random()-0.5)*10;
-    return {x:x*2.5,y:y*2.5,z:z};
-}
-function flower(){
-    let u=Math.random()*Math.PI*2;
-    let k=4;
-    let r=Math.sin(k*u)*20;
-    return {x:r*Math.cos(u),y:r*Math.sin(u),z:(Math.random()-0.5)*20};
-}
-function saturn(){
-    if(Math.random()<0.65)return sphere(28);
-    let a=Math.random()*Math.PI*2;
-    let r=45+Math.random()*10;
-    return {x:r*Math.cos(a),y:(Math.random()-0.5)*2,z:r*Math.sin(a)};
-}
-function torus(){
-    let u=Math.random()*Math.PI*2,v=Math.random()*Math.PI*2;
-    let R=40,r=12;
-    return {x:(R+r*Math.cos(v))*Math.cos(u),y:(R+r*Math.cos(v))*Math.sin(u),z:r*Math.sin(v)};
-}
-
 function setShape(name){
-    for(let i=0;i<PARTICLES;i++){
-        let p=Shape[name]();
+    for(let i=0;i<COUNT;i++){
         let i3=i*3;
+        let p;
+        if(name==="Sphere"){
+            let t=Math.random()*Math.PI*2;
+            let p2=Math.acos(2*Math.random()-1);
+            let r=45;
+            p={
+                x:r*Math.sin(p2)*Math.cos(t),
+                y:r*Math.sin(p2)*Math.sin(t),
+                z:r*Math.cos(p2)
+            };
+        }
+        if(name==="Heart"){
+            let t=Math.random()*Math.PI*2;
+            p={
+                x:16*Math.pow(Math.sin(t),3)*2,
+                y:(13*Math.cos(t)-5*Math.cos(2*t)-2*Math.cos(3*t)-Math.cos(4*t))*2,
+                z:(Math.random()-0.5)*15
+            };
+        }
+        if(name==="Flower"){
+            let u=Math.random()*Math.PI*2;
+            let r=Math.sin(5*u)*30;
+            p={x:r*Math.cos(u),y:r*Math.sin(u),z:(Math.random()-0.5)*20};
+        }
+        if(name==="Saturn"){
+            if(Math.random()<0.7){
+                let t=Math.random()*Math.PI*2;
+                let p2=Math.acos(2*Math.random()-1);
+                let r=28;
+                p={x:r*Math.sin(p2)*Math.cos(t),y:r*Math.sin(p2)*Math.sin(t),z:r*Math.cos(p2)};
+            }else{
+                let a=Math.random()*Math.PI*2;
+                let r=45+Math.random()*8;
+                p={x:r*Math.cos(a),y:(Math.random()-0.5)*2,z:r*Math.sin(a)};
+            }
+        }
+        if(name==="Fireworks"){
+            let t=Math.random()*Math.PI*2;
+            let p2=Math.acos(2*Math.random()-1);
+            let r=Math.cbrt(Math.random())*60;
+            p={x:r*Math.sin(p2)*Math.cos(t),y:r*Math.sin(p2)*Math.sin(t),z:r*Math.cos(p2)};
+        }
         target[i3]=p.x;
         target[i3+1]=p.y;
         target[i3+2]=p.z;
@@ -196,9 +167,15 @@ function setShape(name){
 }
 setShape("Sphere");
 
-/* ================== HAND TRACKING ================== */
-let state={x:0,y:0,pinch:1,fist:false,hue:0,lastSwitch:0};
+/* ================== HAND STATE ================== */
+const state={
+    x:0,y:0,
+    tx:0,ty:0,
+    pinch:1,tpinch:1,
+    lastSwitch:0
+};
 
+/* ================== MEDIAPIPE ================== */
 const video=document.getElementById("video");
 const hands=new Hands({locateFile:f=>`https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`});
 hands.setOptions({
@@ -209,32 +186,25 @@ hands.setOptions({
 });
 
 hands.onResults(res=>{
-if(!res.multiHandLandmarks) return;
-let lm=res.multiHandLandmarks[0];
+    if(!res.multiHandLandmarks) return;
+    const lm=res.multiHandLandmarks[0];
 
-let cx=(lm[9].x-0.5)*2;
-let cy=-(lm[9].y-0.5)*2;
-state.x+= (cx-state.x)*0.15;
-state.y+= (cy-state.y)*0.15;
+    state.tx=(lm[9].x-0.5)*2;
+    state.ty=-(lm[9].y-0.5)*2;
 
-let d=Math.hypot(lm[4].x-lm[8].x,lm[4].y-lm[8].y);
-state.pinch+=((d-0.02)/0.15-state.pinch)*0.12;
-state.pinch=Math.max(0,Math.min(1,state.pinch));
+    const d=Math.hypot(lm[4].x-lm[8].x,lm[4].y-lm[8].y);
+    state.tpinch=Math.max(0,Math.min(1,(d-0.03)/0.15));
 
-let wrist=lm[0];
-let tips=[8,12,16,20];
-let avg=0;
-tips.forEach(t=>avg+=Math.hypot(lm[t].x-wrist.x,lm[t].y-wrist.y));
-avg/=4;
+    let wrist=lm[0],tips=[8,12,16,20];
+    let avg=0;
+    tips.forEach(t=>avg+=Math.hypot(lm[t].x-wrist.x,lm[t].y-wrist.y));
+    avg/=4;
 
-let now=Date.now();
-if(avg<0.25 && !state.fist && now-state.lastSwitch>900){
-    shapeIndex=(shapeIndex+1)%shapes.length;
-    setShape(shapes[shapeIndex]);
-    state.lastSwitch=now;
-    state.fist=true;
-}
-if(avg>0.3) state.fist=false;
+    if(avg<0.25 && Date.now()-state.lastSwitch>1000){
+        shapeIndex=(shapeIndex+1)%shapes.length;
+        setShape(shapes[shapeIndex]);
+        state.lastSwitch=Date.now();
+    }
 });
 
 new Camera(video,{
@@ -245,35 +215,38 @@ new Camera(video,{
 document.getElementById("loading").style.display="none";
 
 /* ================== ANIMATION ================== */
-let clock=new THREE.Clock();
+const clock=new THREE.Clock();
 function animate(){
     requestAnimationFrame(animate);
-    let t=clock.getElapsedTime();
-    let p=geometry.attributes.position.array;
-    let c=geometry.attributes.color.array;
 
-    let scale=0.25+state.pinch*1.6;
-    particles.rotation.y+=0.002+state.x*0.05;
-    particles.rotation.x=state.y*0.6;
+    state.x+= (state.tx-state.x)*0.08;
+    state.y+= (state.ty-state.y)*0.08;
+    state.pinch+= (state.tpinch-state.pinch)*0.1;
 
-    let base=new THREE.Color().setHSL((t*0.08+state.x*0.3)%1,0.85,0.6);
+    particles.rotation.y+=0.002+state.x*0.03;
+    particles.rotation.x=state.y*0.4;
 
-    for(let i=0;i<PARTICLES;i++){
+    const scale=0.6+state.pinch*1.2;
+    const hue=(clock.getElapsedTime()*0.05+state.x*0.3)%1;
+    const color=new THREE.Color().setHSL(hue,0.85,0.6);
+
+    for(let i=0;i<COUNT;i++){
         let i3=i*3;
-        p[i3]+= (target[i3]-p[i3])*0.04;
-        p[i3+1]+= (target[i3+1]-p[i3+1])*0.04;
-        p[i3+2]+= (target[i3+2]-p[i3+2])*0.04;
+        pos[i3]+= (target[i3]-pos[i3])*0.035;
+        pos[i3+1]+= (target[i3+1]-pos[i3+1])*0.035;
+        pos[i3+2]+= (target[i3+2]-pos[i3+2])*0.035;
 
-        p[i3]*=scale;
-        p[i3+1]*=scale;
-        p[i3+2]*=scale;
+        base[i3]=pos[i3]*scale;
+        base[i3+1]=pos[i3+1]*scale;
+        base[i3+2]=pos[i3+2]*scale;
 
-        c[i3]=base.r;
-        c[i3+1]=base.g;
-        c[i3+2]=base.b;
+        col[i3]=color.r;
+        col[i3+1]=color.g;
+        col[i3+2]=color.b;
     }
-    geometry.attributes.position.needsUpdate=true;
-    geometry.attributes.color.needsUpdate=true;
+
+    geo.attributes.position.needsUpdate=true;
+    geo.attributes.color.needsUpdate=true;
 
     renderer.render(scene,camera);
 }
