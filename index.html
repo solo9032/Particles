@@ -522,12 +522,52 @@
             particles.scale.setScalar(scale);
 
             // Update Colors based on Y position for gradient
+           // ... (Inside animate function loop)
+
             for(let i=0; i<CONFIG.particleCount; i++) {
                 const i3 = i*3;
-                const y = posArr[i3+1]; // Y pos
-                const mix = (y + 50) / 100; // Normalize roughly
+
+                // Physics: Move current position to target
+                const tx = targetPositions[i3];
+                const ty = targetPositions[i3+1];
+                const tz = targetPositions[i3+2];
+
+                // Ease factor: 0.05 se 0.08 kar sakte hain agar shape jaldi banana hai
+                posArr[i3] += (tx - posArr[i3]) * 0.05;
+                posArr[i3+1] += (ty - posArr[i3+1]) * 0.05;
+                posArr[i3+2] += (tz - posArr[i3+2]) * 0.05;
+            }
+            
+            // --- FIX FOR PURA ZOOM (FULL ZOOM) ---
+            
+            // 1. Zoom Multiplier: Is number ko badhayein (e.g., 2, 3, 4) zyada zoom ke liye
+            const zoomIntensity = 2.5; 
+            
+            // 2. Base Scale: Minimum size (taaki shape gayab na ho jaye jab hath paas ho)
+            const minScale = 0.2; 
+
+            // 3. Calculation:
+            // Hum 'scale' variable (jo AI se aa raha hai) ko multiply kar rahe hain
+            let finalScale = (scale * zoomIntensity); 
+            
+            // Prevent negative or zero scale (crash rokne ke liye)
+            if (finalScale < minScale) finalScale = minScale;
+
+            // Apply Pinch Scale to the entire Group
+            particles.scale.setScalar(finalScale);
+
+            // Optional: Thoda Rotation add karein jab zoom ho raha ho (Cinematic effect)
+            particles.rotation.y += 0.002;
+
+
+            // Update Colors based on Y position for gradient
+            for(let i=0; i<CONFIG.particleCount; i++) {
+                const i3 = i*3;
                 
-                // Manual Lerp for performance
+                // Color logic same as before
+                const y = posArr[i3+1]; 
+                const mix = (y + 50) / 100; 
+                
                 colArr[i3] = color1.r * (1-mix) + color2.r * mix;
                 colArr[i3+1] = color1.g * (1-mix) + color2.g * mix;
                 colArr[i3+2] = color1.b * (1-mix) + color2.b * mix;
